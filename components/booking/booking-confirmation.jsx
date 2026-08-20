@@ -7,7 +7,7 @@ import { cancelBookingAction } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { formatMoney, formatSeatList, formatTimestamp } from "@/lib/format";
+import { formatTimestamp } from "@/lib/format";
 
 function Row({ label, value }) {
   return (
@@ -18,7 +18,7 @@ function Row({ label, value }) {
   );
 }
 
-export function BookingConfirmation({ booking, trip, onStartOver }) {
+export function BookingConfirmation({ booking, bus, onStartOver }) {
   const [cancelState, cancelAction, cancelPending] = useActionState(cancelBookingAction, null);
   const cancelled = cancelState?.status === "success";
 
@@ -30,7 +30,7 @@ export function BookingConfirmation({ booking, trip, onStartOver }) {
         ) : (
           <Badge>
             <CircleCheck className="size-3" aria-hidden />
-            Confirmed
+            Reserved
           </Badge>
         )}
         <span className="flex items-center gap-1.5 font-mono text-sm">
@@ -41,20 +41,23 @@ export function BookingConfirmation({ booking, trip, onStartOver }) {
 
       <div className="grid gap-2">
         <Row label="Passenger" value={booking.passenger.name} />
-        <Row label="Phone" value={booking.passenger.phone} />
-        {booking.passenger.email ? <Row label="Email" value={booking.passenger.email} /> : null}
+        <Row label="Email" value={booking.passenger.email} />
+        {booking.passenger.phone ? <Row label="Phone" value={booking.passenger.phone} /> : null}
         <Separator className="my-1" />
-        <Row label="Route" value={`${trip.origin} → ${trip.destination}`} />
-        <Row label="Departs" value={trip.departsAtLabel} />
-        <Row label="Coach" value={trip.coach} />
-        <Row
-          label={booking.seatIds.length === 1 ? "Seat" : "Seats"}
-          value={formatSeatList(booking.seatIds)}
-        />
-        <Separator className="my-1" />
-        <Row label="Total paid" value={formatMoney(booking.amount)} />
-        <Row label="Booked at" value={formatTimestamp(booking.createdAt)} />
+        <Row label="Bus" value={bus.name} />
+        <Row label="Seat" value={booking.seatId} />
+        <Row label="Reserved at" value={formatTimestamp(booking.createdAt)} />
       </div>
+
+      {cancelled ? (
+        <p className="text-xs text-muted-foreground">
+          That seat is free again, and this email can reserve another one.
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          This is your one seat. Cancel it before reserving a different seat or bus.
+        </p>
+      )}
 
       {cancelState?.status === "error" ? (
         <p role="alert" className="text-xs text-destructive">
@@ -63,8 +66,8 @@ export function BookingConfirmation({ booking, trip, onStartOver }) {
       ) : null}
 
       <div className="flex items-center gap-2">
-        <Button onClick={onStartOver} className="flex-1">
-          Book more seats
+        <Button onClick={onStartOver} variant={cancelled ? "default" : "outline"} className="flex-1">
+          {cancelled ? "Reserve another seat" : "Done"}
         </Button>
         {cancelled ? null : (
           <form action={cancelAction}>

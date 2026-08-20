@@ -3,7 +3,6 @@
 import { Ban, DoorOpen, LifeBuoy, Snowflake } from "lucide-react";
 
 import { SEAT_TYPES } from "@/lib/bus-layout";
-import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const SEAT_STATE_CLASSES = {
@@ -21,7 +20,7 @@ const FIXTURE_ICONS = {
   arch: null,
 };
 
-function Seat({ seat, state, onToggle }) {
+function Seat({ seat, state, onSelect }) {
   const disabled = state === "booked";
   const seatType = SEAT_TYPES[seat.type];
 
@@ -31,11 +30,9 @@ function Seat({ seat, state, onToggle }) {
       disabled={disabled}
       aria-pressed={state === "selected"}
       aria-label={`Seat ${seat.label}, ${seatType?.label ?? "standard"}, ${
-        disabled
-          ? "already booked"
-          : `${formatMoney(seatType?.fare)}, ${state === "selected" ? "selected" : "available"}`
+        disabled ? "already booked" : state === "selected" ? "selected" : "available"
       }`}
-      onClick={() => onToggle(seat.id)}
+      onClick={() => onSelect(seat.id)}
       style={{ gridColumn: seat.gridColumn, gridRow: seat.gridRow }}
       className={cn(
         "relative flex h-11 w-12 flex-col items-center justify-center rounded-lg ring-1 transition-all",
@@ -114,12 +111,13 @@ export function SeatMapLegend() {
 }
 
 /**
- * Renders any layout of the `BUS_LAYOUT` shape, drawn top-down: the bus runs
- * front-to-rear down the page, so a plan column becomes a grid row and a lateral
- * band becomes a grid column. A different coach type needs no changes here.
+ * Renders any bus of the `BUSES` shape, drawn top-down: the bus runs front-to-rear
+ * down the page, so a plan column becomes a grid row and a lateral band becomes a
+ * grid column. A different coach needs no changes here. One seat is selectable at
+ * a time — a passenger may hold exactly one.
  */
-export function SeatMap({ layout, seatStatuses, selectedSeatIds, onToggleSeat }) {
-  const gridColumnByBand = new Map(layout.bands.map((band, index) => [band.id, index + 1]));
+export function SeatMap({ bus, seatStatuses, selectedSeatId, onSelectSeat }) {
+  const gridColumnByBand = new Map(bus.bands.map((band, index) => [band.id, index + 1]));
   // Row 1 holds the band headers, so plan column N lands on grid row N + 1.
   const gridRowForColumn = (col) => col + 1;
 
@@ -136,11 +134,11 @@ export function SeatMap({ layout, seatStatuses, selectedSeatIds, onToggleSeat })
         <div
           className="grid gap-1.5"
           style={{
-            gridTemplateColumns: `repeat(${layout.bands.length}, 3rem)`,
-            gridTemplateRows: `1.25rem repeat(${layout.columns}, 2.75rem)`,
+            gridTemplateColumns: `repeat(${bus.bands.length}, 3rem)`,
+            gridTemplateRows: `1.25rem repeat(${bus.columns}, 2.75rem)`,
           }}
         >
-          {layout.bands.map((band, index) => (
+          {bus.bands.map((band, index) => (
             <div
               key={band.id}
               style={{ gridColumn: index + 1, gridRow: 1 }}
@@ -151,7 +149,7 @@ export function SeatMap({ layout, seatStatuses, selectedSeatIds, onToggleSeat })
             </div>
           ))}
 
-          {layout.seats.map((seat) => (
+          {bus.seats.map((seat) => (
             <Seat
               key={seat.id}
               seat={{
@@ -160,15 +158,13 @@ export function SeatMap({ layout, seatStatuses, selectedSeatIds, onToggleSeat })
                 gridRow: gridRowForColumn(seat.col),
               }}
               state={
-                selectedSeatIds.includes(seat.id)
-                  ? "selected"
-                  : (seatStatuses[seat.id] ?? "available")
+                seat.id === selectedSeatId ? "selected" : (seatStatuses[seat.id] ?? "available")
               }
-              onToggle={onToggleSeat}
+              onSelect={onSelectSeat}
             />
           ))}
 
-          {layout.fixtures.map((fixture) => (
+          {bus.fixtures.map((fixture) => (
             <Fixture
               key={fixture.id}
               fixture={{

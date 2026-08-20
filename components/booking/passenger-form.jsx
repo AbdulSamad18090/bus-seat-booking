@@ -5,7 +5,6 @@ import { ArrowLeft, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatMoney } from "@/lib/format";
 
 function Field({ id, label, error, children, hint }) {
   return (
@@ -23,12 +22,14 @@ function Field({ id, label, error, children, hint }) {
   );
 }
 
-export function PassengerForm({ action, pending, state, seatIds, amount, onBack }) {
+export function PassengerForm({ action, pending, state, busId, seatId, onBack }) {
   const fieldErrors = state?.fieldErrors ?? {};
 
   return (
     <form action={action} className="grid gap-4">
-      <input type="hidden" name="seatIds" value={seatIds.join(",")} />
+      {/* Re-validated server-side — these are a convenience, not a source of truth. */}
+      <input type="hidden" name="busId" value={busId} />
+      <input type="hidden" name="seatId" value={seatId ?? ""} />
 
       <Field id="name" label="Full name" error={fieldErrors.name}>
         <Input
@@ -39,6 +40,24 @@ export function PassengerForm({ action, pending, state, seatIds, amount, onBack 
           required
           aria-invalid={Boolean(fieldErrors.name)}
           aria-describedby={fieldErrors.name ? "name-error" : undefined}
+        />
+      </Field>
+
+      <Field
+        id="email"
+        label="Email"
+        error={fieldErrors.email}
+        hint="One seat per email address, across every bus."
+      >
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          autoComplete="email"
+          placeholder="you@example.com"
+          required
+          aria-invalid={Boolean(fieldErrors.email)}
+          aria-describedby={fieldErrors.email ? "email-error" : undefined}
         />
       </Field>
 
@@ -55,18 +74,6 @@ export function PassengerForm({ action, pending, state, seatIds, amount, onBack 
         />
       </Field>
 
-      <Field id="email" label="Email (optional)" error={fieldErrors.email}>
-        <Input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          placeholder="you@example.com"
-          aria-invalid={Boolean(fieldErrors.email)}
-          aria-describedby={fieldErrors.email ? "email-error" : undefined}
-        />
-      </Field>
-
       {state?.status === "error" && state.message ? (
         <p
           role="alert"
@@ -80,10 +87,10 @@ export function PassengerForm({ action, pending, state, seatIds, amount, onBack 
       <div className="flex items-center gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onBack} disabled={pending}>
           <ArrowLeft data-icon="inline-start" className="size-4" aria-hidden />
-          Seats
+          Seat
         </Button>
-        <Button type="submit" className="flex-1" disabled={pending}>
-          {pending ? "Confirming…" : `Pay ${formatMoney(amount)}`}
+        <Button type="submit" className="flex-1" disabled={pending || !seatId}>
+          {pending ? "Reserving…" : `Reserve seat ${seatId ?? ""}`}
         </Button>
       </div>
     </form>

@@ -2,17 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 
-import { BUS_LAYOUT, getSeat } from "@/lib/bus-layout";
+import { DEFAULT_BUS_ID, getBus, getBusSeat } from "@/lib/bus-layout";
 import { cancelBooking, createBooking } from "@/lib/bookings-store";
 
 const PHONE_DIGITS = /\d/g;
-
-function parseSeatIds(raw) {
-  return String(raw ?? "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function validatePassenger(formData) {
   const name = String(formData.get("name") ?? "").trim();
@@ -24,7 +18,11 @@ function validatePassenger(formData) {
   if ((phone.match(PHONE_DIGITS) ?? []).length < 7) {
     fieldErrors.phone = "Enter a reachable phone number.";
   }
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  // Required, not optional: the email is the passenger's identity, and the whole
+  // one-seat-per-passenger rule is keyed on it.
+  if (!email) {
+    fieldErrors.email = "Enter your email — one seat per email address.";
+  } else if (!EMAIL_SHAPE.test(email)) {
     fieldErrors.email = "That email address doesn't look right.";
   }
 
@@ -33,23 +31,22 @@ function validatePassenger(formData) {
 
 /**
  * Server Action for the passenger-details step. Reachable by direct POST, so the
- * seat list is re-validated here rather than trusting the client's selection.
+ * bus, the seat and every passenger field are re-validated here rather than
+ * trusting whatever the client submitted.
  */
-export async function bookSeatsAction(_previousState, formData) {
-  const seatIds = parseSeatIds(formData.get("seatIds"));
+export async function reserveSeatAction(_previousState, formData) {
+  const busId = String(formData.get("busId") ?? "").trim() || DEFAULT_BUS_ID;
+  const seatId = String(formData.get("seatId") ?? "").trim();
 
-  if (seatIds.length === 0) {
-    return { status: "error", message: "Select at least one seat before booking." };
+  if (!getBus(busId)) {
+    return { status: "error", message: `Unknown bus: ${busId}.` };
   }
-  if (seatIds.length > BUS_LAYOUT.maxSeatsPerBooking) {
-    return {
-      status: "error",
-      message: `You can book at most ${BUS_LAYOUT.maxSeatsPerBooking} seats at a time.`,
-    };
+  if (!seatId) {
+    return { status: "error", message: "Pick a seat before reserving." };
   }
-  const unknown = seatIds.filter((seatId) => !getSeat(seatId));
-  if (unknown.length > 0) {
-    return { status: "error", message: `Unknown seat: ${unknown.join(", ")}.` };
+  // Rejects fixtures as well as nonsense: A1 is the driver's seat, not a seat.
+  if (!getBusSeat(busId, seatId)) {
+    return { status: "error", message: `Unknown seat: ${seatId}.` };
   }
 
   const { passenger, fieldErrors } = validatePassenger(formData);
@@ -57,19 +54,24 @@ export async function bookSeatsAction(_previousState, formData) {
     return { status: "error", message: "Check the highlighted fields.", fieldErrors };
   }
 
-  const result = createBooking({ seatIds, passenger });
-  if (!result.ok) {
-    revalidatePath("/");
-    return { status: "error", message: result.error, conflicts: result.conflicts };
-  }
+  const result = await createBooking({ busId, seatId, passenger });
 
   revalidatePath("/");
+  if (!result.ok) {
+    return {
+      status: "error",
+      message: result.error,
+      conflicts: result.conflicts,
+      existing: result.existing,
+    };
+  }
+
   return { status: "success", booking: result.booking };
 }
 
 export async function cancelBookingAction(_previousState, formData) {
   const ref = String(formData.get("ref") ?? "").trim();
-  const result = cancelBooking(ref);
+  const result = await cancelBooking(ref);
 
   revalidatePath("/");
   if (!result.ok) return { status: "error", message: result.error };
