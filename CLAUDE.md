@@ -18,6 +18,11 @@ No test runner is configured in this project.
 
 MongoDB is required to run the app: copy `.env.example` to `.env.local` and set `MONGODB_URI`
 (plus `MONGODB_DB`, default `bus_seat_booking`). Without it, any page that touches the store throws.
+`ADMIN_EMAIL`/`ADMIN_PASSWORD` seed the first admin and `AUTH_SECRET` signs the admin cookie.
+
+Quickest way to exercise the data layer without a browser:
+`node --env-file=.env.local` against a script importing `lib/bookings-store.js` or `lib/admins.js`
+(set `process.env.MONGODB_DB` to a scratch name first — the modules are plain ESM and run under Node).
 
 ## Architecture
 
@@ -49,6 +54,31 @@ The seat-booking feature is built around a **data-driven floor plan**, transcrib
 - `app/api/availability/route.js` — read-only JSON availability feed, deliberately uncached.
 - `components/booking/booking-flow.jsx` — the select → details → confirmation flow, **one seat at a time**: picking another seat replaces the pick instead of adding to it, and `SeatMap` takes a single `selectedSeatId`. `BookingFlow` remounts `BookingSession` via a `key` on "start over", which is how `useActionState` gets reset.
 
+## Admin and access control
+
+Passengers never sign in — the email on the form is their identity, nothing more. **Admins** are the
+only accounts in the system, and their only power is over bookings.
+
+- `lib/admins.js` — the `admins` collection. Passwords are scrypt-hashed with the cost parameters
+  stored in the hash string (`scrypt$N$r$p$salt$key`), compared with `timingSafeEqual`, and an unknown
+  email still burns a comparable amount of time so response timing does not reveal which addresses are
+  admins. `ensureSeedAdmin()` creates the first admin from `ADMIN_EMAIL`/`ADMIN_PASSWORD` on the first
+  sign-in attempt, and **only if that email has no document yet** — once the password is changed in the
+  app the database is authoritative and a stale `.env.local` cannot overwrite it.
+- `lib/admin-session.js` — session as a signed cookie (`bkk_admin_session`): `base64url({email, exp})`
+  plus an HMAC-SHA256 of it under `AUTH_SECRET`, `httpOnly`, `sameSite: lax`, `secure` in production,
+  8 hours. The cookie **grants nothing on its own** — `getAdminSession()` re-checks the email against
+  the collection on every read, so deleting an admin kills their live sessions. Imports `next/headers`,
+  so never pull it into a client component.
+- `requireAdmin()` guards `app/admin/page.js`. **A page guard does not protect a Server Action** — an
+  action is a POST endpoint of its own, so every action in `app/admin/actions.js` re-checks the session
+  as its first statement. Keep that up in any new admin action.
+- Sign-in failures are deliberately vague ("Email or password is incorrect"). There is **no rate
+  limiting** on sign-in; add it before this is exposed to the internet.
+- `cancelBookingAction` in `app/actions.js` is *public* by design: it cancels by booking ref, which is
+  how a passenger drops the seat they just took from their own confirmation screen. The admin path is
+  the separate, guarded `adminCancelBookingAction`.
+
 Two conventions worth keeping:
 
 - **Derive, don't sync.** A selected seat can be taken by someone else mid-flow; the live selection is derived from the server's seat statuses. `eslint-plugin-react-hooks` errors on `setState` inside an effect (`react-hooks/set-state-in-effect`), so reach for derived state.
@@ -56,4 +86,6 @@ Two conventions worth keeping:
 
 Relative imports inside `lib/` carry explicit `.js` extensions so the modules also run under plain Node (`node --env-file=.env.local` against `lib/bookings-store.js` is the quickest way to exercise the booking rules); the `@/…` aliased imports need the bundler.
 
-**Scope, deliberately.** No trips, routes, timetables, fares, payment or auth — this is seat reservation and nothing else. Don't reintroduce any of them; if a feature seems to need one, ask first.
+**Scope, deliberately.** No trips, routes, timetables, fares or payment — this is seat reservation plus
+an admin who can see and cancel bookings, and nothing else. Passengers have no accounts. Don't
+reintroduce any of the above; if a feature seems to need one, ask first.

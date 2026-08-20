@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { BookingFlow } from "@/components/booking/booking-flow";
 import { BUS_LAYOUT } from "@/lib/bus-layout";
 import { getSeatAvailability, summarizeSeats } from "@/lib/bookings-store";
@@ -13,7 +15,16 @@ export default async function Home() {
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:py-12">
-      <h1 className="mb-8 font-heading text-2xl font-medium">Reserve Your Seat</h1>
+      <div className="mb-8 flex items-center justify-between gap-4">
+        <h1 className="font-heading text-2xl font-medium">Reserve Your Seat</h1>
+        {/* Booking needs no account; this is only for whoever manages the bookings. */}
+        <Link
+          href="/admin"
+          className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          Admin
+        </Link>
+      </div>
 
       <BookingFlow bus={bus} seatStatuses={seatStatuses} summary={summarizeSeats(availability)} />
     </main>
